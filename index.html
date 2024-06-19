@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Responsive Mapbox Map</title>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet">
+    <link href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.1.1/mapbox-gl-directions.css" rel="stylesheet">
+    <link href="https://api.mapbox.com/mapbox-gl-geocoder/v4.7.2/mapbox-gl-geocoder.css" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .mapboxgl-ctrl-top-right {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1;
+        }
+        .mapboxgl-ctrl-bottom-left {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 1;
+        }
+        .mapboxgl-ctrl-bottom-right {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 1;
+        }
+        .speed-container {
+            background: white;
+            padding: 5px;
+            border-radius: 3px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.1.1/mapbox-gl-directions.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-geocoder/v4.7.2/mapbox-gl-geocoder.min.js"></script>
+    <script>
+        mapboxgl.accessToken = 'pk.eyJ1IjoiY2hocDIxMiIsImEiOiJjbHhpd24xdXQwc2cxMmpzZnYxcnNrYzF6In0.5ORPOmym7QQsOgjB8j8eow';
+
+        // Initialize the map
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/streets-v11',
+            center: [-74.5, 40], // Starting position [lng, lat]
+            zoom: 9 // Starting zoom
+        });
+
+        // Add navigation controls (zoom and rotation)
+        map.addControl(new mapboxgl.NavigationControl());
+
+        // Add geolocate control to the map
+        const geolocate = new mapboxgl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: true
+            },
+            trackUserLocation: true,
+            showUserHeading: true,
+            showAccuracyCircle: false
+        });
+        map.addControl(geolocate);
+
+        // Add directions control
+        const directions = new MapboxDirections({
+            accessToken: mapboxgl.accessToken,
+            unit: 'metric',
+            profile: 'mapbox/driving',
+            interactive: false,
+            controls: {
+                instructions: true
+            }
+        });
+        map.addControl(directions, 'top-right');
+
+        // Add search control
+        const geocoder = new MapboxGeocoder({
+            accessToken: mapboxgl.accessToken,
+            mapboxgl: mapboxgl
+        });
+        map.addControl(geocoder, 'top-left');
+
+        // Add different map layers for views
+        const layerList = document.createElement('div');
+        layerList.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
+
+        const layers = [
+            { id: 'streets-v11', name: 'Streets' },
+            { id: 'outdoors-v11', name: 'Outdoors' },
+            { id: 'light-v10', name: 'Light' },
+            { id: 'dark-v10', name: 'Dark' },
+            { id: 'satellite-v9', name: 'Satellite' },
+            { id: 'satellite-streets-v11', name: 'Satellite Streets' }
+        ];
+
+        layers.forEach(layer => {
+            const button = document.createElement('button');
+            button.textContent = layer.name;
+            button.onclick = () => map.setStyle(`mapbox://styles/mapbox/${layer.id}`);
+            layerList.appendChild(button);
+        });
+
+        map.addControl(new mapboxgl.Control({ element: layerList, position: 'bottom-left' }));
+
+        // Speed container for displaying speed
+        const speedContainer = document.createElement('div');
+        speedContainer.className = 'speed-container';
+        speedContainer.textContent = 'Speed: 0 km/h';
+        map.addControl(new mapboxgl.Control({ element: speedContainer, position: 'bottom-right' }));
+
+        // Function to start the route in real-time
+        function startRoute(origin, destination) {
+            directions.setOrigin(origin);
+            directions.setDestination(destination);
+            geolocate.trigger();
+        }
+
+        // Function to calculate and display speed
+        let previousLocation = null;
+        let previousTime = null;
+        geolocate.on('geolocate', (e) => {
+            const currentLocation = [e.coords.longitude, e.coords.latitude];
+            const currentTime = new Date();
+
+            if (previousLocation && previousTime) {
+                const distance = turf.distance(previousLocation, currentLocation); // Distance in km
+                const time = (currentTime - previousTime) / 3600000; // Time in hours
+                const speed = distance / time; // Speed in km/h
+                speedContainer.textContent = `Speed: ${speed.toFixed(2)} km/h`;
+            }
+
+            previousLocation = currentLocation;
+            previousTime = currentTime;
+        });
+
+        // Example usage of startRoute function
+        document.getElementById('start-button').onclick = () => {
+            const origin = [-74.5, 40]; // Replace with actual origin coordinates
+            const destination = [-73.9, 40.5]; // Replace with actual destination coordinates
+            startRoute(origin, destination);
+        };
+
+        // Adding route animation
+        map.on('load', () => {
+            map.addSource('route', {
+                'type': 'geojson',
+                'data': {
+                    'type': 'Feature',
+                    'properties': {},
+                    'geometry': {
+                        'type': 'LineString',
+                        'coordinates': []
+                    }
+                }
+            });
+
+            map.addLayer({
+                'id': 'route',
+                'type': 'line',
+                'source': 'route',
+                'layout': {
+                    'line-join': 'round',
+                    'line-cap': 'round'
+                },
+                'paint': {
+                    'line-color': '#888',
+                    'line-width': 8
+                }
+            });
+
+            const routeCoordinates = [[-74.5, 40], [-73.9, 40.5]]; // Example coordinates
+            const route = map.getSource('route');
+            let step = 0;
+            const animateRoute = () => {
+                if (step < routeCoordinates.length) {
+                    route.setData({
+                        'type': 'Feature',
+                        'properties': {},
+                        'geometry': {
+                            'type': 'LineString',
+                            'coordinates': routeCoordinates.slice(0, step + 1)
+                        }
+                    });
+                    step++;
+                    requestAnimationFrame(animateRoute);
+                }
+            };
+            animateRoute();
+        });
+
+    </script>
+</body>
+</html>
